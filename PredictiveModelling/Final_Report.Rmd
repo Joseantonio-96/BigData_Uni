@@ -1,0 +1,759 @@
+---
+title: "Predictive Modelling - Problem Sets"
+author: | 
+  | Antonio de Padua Diaz Martinez - 100346125
+  | Jose Antonio Jijon Vorbeck - 100438045
+  | Didier Dirks - 100443386
+date: "13/01/2021"
+indent: true
+output: 
+  html_document: default
+  pdf_document: default
+---
+
+The exercises assigned to our group were the following: 
+
+* A-2
+* B-6
+* C-3
+
+```{r Load data and set directory, include = FALSE}
+setwd("/Users/joseantoniojijon/Documents/UC3M/Clases/Bimestre_II/PredictiveModelling/Project")
+load("/Users/joseantoniojijon/Documents/UC3M/Clases/Bimestre_II/PredictiveModelling/Project/qmnist_nist.RData")
+```
+
+
+### Exercise A-2 
+#### Tweaking $R_0^2$ by shifting the mean of the predictor's or response values
+
+```{r, include = FALSE}
+library(datasets)
+data(iris)
+attach(iris)
+```
+**a.)   For the example in Section 2.7.2, display the $R_0^2$ as a function of a shift in mean of the predictor Petal.Width. What can you conclude?**
+
+We can see here how the shift in the mean of the predictors greatly influences the $R_0^2$ of the model as the absolute value of the shift grows (i.e. it goes towards 10 or -10). This of course is wrong, since the $R_0^2$ value is no longer valid since the model is fitted without intercept and the values are generally not centered. 
+
+```{r a, echo=FALSE}
+sequence <- seq(-10,10, l= 100)
+
+r_0 <- numeric(0)
+for (i in 1:length(sequence)){
+  shifted_PetalWidth = Petal.Width + sequence[i]
+  r_0[i] <- summary(lm(Sepal.Length ~ 0 + shifted_PetalWidth))$r.squared
+}
+
+plot(r_0 ~ sequence, main= 'R2_0 as a function of the shift in the mean of Petal.Width',
+     xlab = 'Shift in mean', ylab = 'R2_0')
+```
+
+This graph gives us an idea of how shifting the mean of the predictors radically changes the result of the $R_0^2$ value in a model without intercept, which in reality, with an intercept should not change since we are not modifying any extra information to the data, and only the intercept should move, if we had any. 
+
+**b. What shift on Petal.Width would be necessary to achieve an $R_0^2$ ≈ 0.95? Is this shift unique?**
+   
+We will solve this problem numerically by trying out different values of the shift. And with the help of the plot in part a.) we can choose a starting point.
+
+First, by starting with shift = 0 and then going towards the positive side
+```{r b-1}
+r_0 <- numeric(0)
+r_0[1] = 0
+i = 1
+shift <- seq(0,10, l = 1000)
+while (r_0[i] < 0.95){
+  i = i + 1
+  shifted_PetalWidth = Petal.Width + shift[i]
+  r_0[i] <- summary(lm(Sepal.Length ~ 0 + shifted_PetalWidth))$r.squared
+}
+pos = shift[i]
+cat('R2_0 reaches 0.95 when the positive shift in the mean is:', pos )
+```
+
+Now, by starting with shift = 0 and  going towards the negative side
+
+```{r b-2}
+r_0 <- numeric(0)
+r_0[1] = 0
+i = 1
+shift <- seq(0,-10, l = 1000)
+while (r_0[i] < 0.95){
+  i = i + 1
+  shifted_PetalWidth = Petal.Width + shift[i]
+  r_0[i] <- summary(lm(Sepal.Length ~ 0 + shifted_PetalWidth))$r.squared
+}
+neg = shift[i]
+cat('R2_0 reaches 0.95 when the negative shift in the mean is:', neg )
+```
+
+We have shown that we can reach $R_0^2$ with two different values with pos and with neg. These two options are unique, since the function is asymptotically increasing towards 1 as it approaches +/- INF.
+
+
+**c. Do the same but for a shift in the mean of the response Sepal.Length. What shift would be necessary to achieve an $R_0^2$ ≈ 0.50? Is there a single shift? Comment.**
+
+First we will plot the response of the $R_0^2$ when shifting the mean of (Sepal Length) to have a first visualization of its behavior.
+```{r c-1, echo=FALSE}
+sequence <- seq(-10,10, l= 100)
+r_0 <- numeric(0)
+for (i in 1:length(sequence)){
+  shifted_SepalLength = Sepal.Length + sequence[i]
+  r_0[i] <- summary(lm(shifted_SepalLength ~ 0 + Petal.Width))$r.squared
+}
+plot(r_0 ~ sequence, main= 'R2_0 as a function of the shift in the mean of response Sepal.Length',
+     xlab = 'Shift in mean', ylab = 'R2_0')
+```
+
+Again, we see that the value of $R_0^2$ changes as we shift positively or negatively the mean of the response.
+
+Now we will perform a numerical search to see where we get $R_0^2$ = 0.5. By looking at the graph we can see that there are at least two possible values. 
+
+The first value we encounter is:
+```{r c-2}
+r_0 <- numeric(0)
+r_0[1] = 1
+i = 1
+shift <- seq(0,-10, l = 1000)
+while (r_0[i] > 0.5){
+  i = i + 1
+  shifted_SepalLength = Sepal.Length + shift[i]
+  r_0[i] <- summary(lm(shifted_SepalLength ~ 0 + Petal.Width))$r.squared
+}
+r2 <- r_0[i]
+s1 = shift[i]
+sprintf('When the shift is equal to %f,  we get R2_0 ~ %f', s1, r2)
+```
+
+For the second value we start at -6 according to the graph above, and we get:
+```{r c-3}
+r_0 <- numeric(0)
+r_0[1] = 0
+i = 1
+shift <- seq(-6,-15, l = 1000)
+while (r_0[i] < 0.5){
+  i = i + 1
+  shifted_SepalLength = Sepal.Length + shift[i]
+  r_0[i] <- summary(lm(shifted_SepalLength ~ 0 + Petal.Width))$r.squared
+}
+r2 <- r_0[i]
+s1 = shift[i]
+sprintf('When the shift is equal to %f,  we get R2_0 ~ %f', s1, r2)
+```
+
+We have shown the two only choices to get to the value of $R_0^2$, since by inspection in the plot above, we can see that there would not be other possibilities, as in the negative side it grows as the shift approaches -INF, and in the positive side the $R_0^2$ will reach an asymptotic value around 0.75.
+
+
+**d. Consider the multiple linear model medv ~ nox + rm for the Boston data set. We want to tweak the $R_0^2$ to set it to any number in [0, 1]. Can we achieve this by only shifting rm or medv (only one of them)?**
+
+```{r d load boston data, include= FALSE}
+library(MASS)
+data(Boston)
+attach(Boston)
+```
+We now that by definition, $R_0^2$ is meant to measure the models that have no intercept, since they arise from the ;no-intercept ANOVA decomposition'. We see that the $R_0^2$ of the case with no intercept in our example is already very high, since by definition, the $R_0^2$ must always be in the interval [0,1]. 
+```{r d-0}
+summary(lm(medv ~ 0 + nox + rm ))$r.squared
+```
+We want to see if it is possible to change this value by only changing the mean of the predictor 'rm' or the response 'medv' (only one of them at the time). 
+
+To check if it changes, we will plot the behavior of $R_0^2$ by a shift on the mean of the predictor 'rm', in a similar way to the above examples:
+```{r d-1, echo=FALSE}
+sequence <- seq(-20,20, l= 200)
+r_0 <- numeric(0)
+for (i in 1:length(sequence)){
+  shifted_rm = rm + sequence[i]
+  r_0[i] <- summary(lm(medv ~ 0 + nox + shifted_rm))$r.squared
+}
+
+plot(r_0 ~ sequence, main= 'R2_0 as a function of the shift in the mean of "rm"',
+     xlab = 'Shift in mean of "rm"', ylab = 'R2_0')
+```
+
+By inspection of the graph, we can see that it is indeed possible to tweak the $R_0^2$ of the model by only shifting the mean of the parameter "rm". We can clearly see that the value of $R_0^2$ decreases to around 0.75 when the shift is around -10, and grows up to almost 0.99 when the shift is around -3. 
+
+Now we will plot the change in $R_0^2$ by shifting the mean of the response variable, in this case "medv"
+If the graph would remain constant, that would mean that there is no effect in the $R_0^2$ by changing the mean of the response.
+
+```{r d-2, echo=FALSE}
+sequence <- seq(-20,20, l= 200)
+r_0 <- numeric(0)
+for (i in 1:length(sequence)){
+  shifted_medv = medv + sequence[i]
+  r_0[i] <- summary(lm(shifted_medv ~ 0 + nox + rm))$r.squared
+}
+
+plot(r_0 ~ sequence, main= 'R2_0 vs a shift in the mean of the response "medv"',
+     xlab = 'Shift in mean of response "medv"', ylab = 'R2_0')
+```
+
+By inspection of the plot, we can see that there is a clear change in the value of the $R_0^2$ as we increase or decrease the shift in the mean. Moreover, we see that as we have a positive shift, the $R_0^2$ value approaches 1, while in the negative direction it decreases towards 0.
+   
+**e. Explore systematically the $R_0^2$ for the shifting combinations of rm and medv and obtain a combination that delivers an $R_0^2$ ≈ 0.30. Plot and comment.**
+
+First we make a contour plot of the behavior of $R_0^2$ vs the shift in the mean of the predictor and the shift in the mean of the response values. 
+
+```{r e}
+shift <- seq(-20,20, l=50)
+x = shift
+y = shift
+model_r2_0 <- matrix(0, nrow = length(x), ncol = length(y))
+
+for (i in 1:length(x)){
+  for (j in 1:length(y)){
+    
+    model_r2_0[i,j] <- summary(lm( I(medv + x[i]) ~  0 + nox + I(rm + y[j]) ))$r.squared
+    
+  }
+}
+
+filled.contour(x , y , model_r2_0,
+               plot.title = title(main = "R2_0 vs. shift in response 'medv' and predictor 'rm' ",
+                                  xlab = "Shift of 'medv'", ylab = "Shift of 'rm'"),
+                )
+```
+
+As we can see in the plot, there is a change of the $R_0^2$ value and it is definitely not constant, as the shift changes in the predictor and in the response.
+
+Now we will perform a line search to obtain shifting values in the mean of the predictor and response to try to get as close as possible to $R_0^2$ ≈ 0.3. 
+
+```{r A-2 e}
+r20 = 0
+i = 1
+j = 1
+while ( round(r20, 2) != 0.30){
+  i = i+1
+  while (round(r20, 2) != 0.30){
+    j = j + 1
+      r20 <- summary(lm( I(medv + x[i]) ~ 0 + nox + I(rm + y[j]) ))$r.squared
+  }
+}
+
+sprintf('When the shift in the predictor rm is %f and the shift in the response medv is %f, we get R2_0 = %f',
+        y[j], x[i], r20 )
+```
+
+This is only one possible point to get the $R_0^2$ ≈ 0.3. Since by looking at the above plot, we can conclude that there ar multiple ways of reaching this value, and it is not restricted to only this.
+
+### Exercise B-6
+
+#### Digit images recognition with a logistic regression
+
+Download and import the dataset qmnist_nist.RData. It contains the data frames train_nist 
+and test_nist, both with variables digit (a vector with digit labels), writer (a vector
+with writer’s ID), and px (a matrix with 28 × 28 = 784 columns of pixel gray levels). 
+
+The objective of this exercise is to make a shrinkage logistic model to be able to predict the correct digit out two possible digits shown in the images. The dataset contains 30405 observation with digits ranging from 0-9, and they are presented in a matrix size 28x28 (784 pixels).
+
+The digits in the images can be visualized with the following function:
+
+```{r B-6 make image}
+show_digit <- function(x, col = gray(255:1 / 255), ...) {
+  l <- sqrt(length(x))
+  image(matrix(as.numeric(x), nrow = l)[, l:1], col = col, ...)
+}
+# To visualize the first element as an example:
+show_digit(as.vector(train_nist$px)[1,])
+```
+
+**a. Transform train_nist to perform a shrinkage logistic model for classifying the digits 4 and 9. Visualize the average of 4’s and 9’s in that dataset.**
+
+Here we must perform a transfomation in the dataset "train_nist" in order to make the analysis. 
+
+```{r B6A}
+sub = subset(train_nist[c(1,3)], digit %in% c(4, 9))
+data = cbind(as.numeric(as.character(sub$digit)), sub$px)
+names(data)[1] = "digit"
+```
+
+Below we can see the representation of the average of the digit 4 and the digit 9, we see that they are blurry, since they represent the average of all digits 4 and 9 present in the training data.
+
+```{r B6A 2, echo=FALSE}
+# average 4 in dataset
+show_digit(colMeans(subset(data, digit == 4))[2:785])
+
+# average 9 in dataset
+show_digit(colMeans(subset(data, digit == 9))[2:785])
+```
+
+**b. Fit ridge and lasso models, with suitably-chosen λ. Do you need to standardize the predictors?**
+
+In this case the predictors  need to be standardized, or otherwise its scale will distort the optimization of the r=logistic regresion. 
+
+But we must keep in mind that the glmnet package function standardizes the variables by default (automatically) to make the model fitting since the penalization is scale-sensitive. Therefore we do not need to manually standardize the data to be fed into the model.
+
+We train the model with the "binomial" family type, since we want to do a logistic regression. And we chose 5 folds for the cross validation of the model.
+
+```{r B6B}
+library(glmnet)
+x <- model.matrix(digit ~ 0 + ., data = data)
+y <- data$digit
+ncvRidge <- cv.glmnet(x = x, y = y, alpha = 0, nfolds = 5, family = "binomial")
+ncvLasso <- cv.glmnet(x = x, y = y, alpha = 1, nfolds = 5, family = "binomial")
+
+modRidgeCV <- ncvRidge$glmnet.fit
+modLassoCV <- ncvLasso$glmnet.fit
+```
+
+**c. Plot the estimated β in a way that delivers insights about which pixels are driving classification. Which of the two fits is more interpretable in your opinion?**
+
+In the following graphs we will show the estimated $\beta s$ for the Ridge and the Lasso logistic regressions, and these plots will help us see the which predictors are consistently important in the model.
+
+```{r B6C ridge, echo=FALSE}
+plot(modRidgeCV, label = TRUE, xvar = "lambda")
+abline(v = log(c(ncvRidge$lambda.min, ncvRidge$lambda.1se)))
+
+plot(modRidgeCV, xvar = "norm", label = TRUE)
+plot(modRidgeCV, label = TRUE, xvar = "dev")
+```
+
+We can see in the plots above that some persistently important predictors for the Ridge logistic regression are 753, 451 and  367 and 227. 
+
+```{r B6C Lasso, echo= FALSE}
+plot(modLassoCV, label = TRUE, xvar = "lambda")
+abline(v = log(c(ncvLasso$lambda.min, ncvLasso$lambda.1se)))
+
+plot(modLassoCV, xvar = "norm", label = TRUE)
+plot(modLassoCV, label = TRUE, xvar = "dev")
+```
+
+In the case of the Lasso regression, we see that there are only two persistently important predictors, and they are 311 and 283.
+
+By looking at both models, we can say that the model that offers an easier interpretation is:...
+
+**d. Using the test_nist dataset, evaluate the prediction accuracy of both models. Which one is better? Is the classification accuracy satisfactory?**
+
+Below we will present the prediction tables for both models, the Ridge and the Lasso, and we will compare their accuracies in predicting the digits correctly.
+
+```{r B6D a, echo=FALSE}
+sub_predict = subset(test_nist[c(1,3)], digit %in% c(4, 9))
+data_predict = cbind(as.numeric(as.character(sub_predict$digit)), sub_predict$px)
+names(data_predict)[1] = "digit"
+x_predict <- model.matrix(digit ~ 0 + ., data = data_predict)
+y_predict <- data_predict$digit
+
+pred_ridge = predict(modRidgeCV, type = "response", s = ncvRidge$lambda.1se, newx = x_predict)
+pred_lasso = predict(modLassoCV, type = "response", s = ncvLasso$lambda.1se, newx = x_predict)
+
+H_ridge <- table(pred_ridge > 0.5, y_predict == 9)
+H_lasso <- table(pred_lasso > 0.5, y_predict == 9)
+```
+
+The prediction table for the Ridge model:
+```{r B6D b, echo=FALSE}
+H_ridge
+```
+
+The prediction table for the Lasso model:
+```{r B6D c, echo=FALSE}
+H_lasso
+```
+
+And finally the accuracies of the two models:
+
+```{r B6D d, echo= FALSE}
+# Accuracy Ridge
+sprintf('Accuracy of Ridge: %f', sum(diag(H_ridge)) / sum(H_ridge))
+
+# Accuracy Lasso
+sprintf('Accuracy of Lasso: %f', sum(diag(H_lasso)) / sum(H_lasso))
+
+```
+
+**e. Repeat Steps a–d for the classification problems of: (i) 5 and 6; (ii) 1 and 7.**
+
+In this section, we will repeat the process but for the digits 5 and 6 and later for the digits 1 and 7.
+
+```{r B6E-5&6}
+# For digits 5 and 6
+sub = subset(train_nist[c(1,3)], digit %in% c(5, 6))
+data = cbind(as.numeric(as.character(sub$digit)), sub$px)
+names(data)[1] = "digit"
+```
+
+Showing the average digits 5 and 6 from the dataset, we get the following:
+
+```{r B6E-5&6 I, echo=FALSE}
+# average 5 in dataset
+show_digit(colMeans(subset(data, digit == 5))[2:785])
+
+# average 6 in dataset
+show_digit(colMeans(subset(data, digit == 6))[2:785])
+```
+
+We build the models:
+
+```{r B6E-5&6 II}
+x <- model.matrix(digit ~ 0 + ., data = data)
+y <- data$digit
+
+ncvRidge <- cv.glmnet(x = x, y = y, alpha = 0, nfolds = 5, family = "binomial")
+modRidgeCV <- ncvRidge$glmnet.fit
+
+ncvLasso <- cv.glmnet(x = x, y = y, alpha = 1, nfolds = 5, family = "binomial")
+modLassoCV <- ncvLasso$glmnet.fit
+```
+
+The plots below help us inspect the best models and see the most meaningful coefficients for both models.
+
+```{r B6E-5&6 III, echo=FALSE}
+plot(modRidgeCV, label = TRUE, xvar = "lambda")
+abline(v = log(c(ncvRidge$lambda.min, ncvRidge$lambda.1se)))
+
+plot(modRidgeCV, xvar = "norm", label = TRUE)
+plot(modRidgeCV, label = TRUE, xvar = "dev")
+```
+
+Some persistently important predictors for Ridge are 746, 60, 172 and 669.
+
+```{r B6E-5&6 IV, echo=FALSE}
+plot(modLassoCV, label = TRUE, xvar = "lambda")
+abline(v = log(c(ncvLasso$lambda.min, ncvLasso$lambda.1se)))
+
+plot(modLassoCV, xvar = "norm", label = TRUE)
+plot(modLassoCV, label = TRUE, xvar = "dev")
+```
+
+Some persistently important predictors for Lasso are 60, 172, 669 and 21.
+
+Now we make the predictions for these digits:
+
+```{r B6E-5&6 V }
+sub_predict = subset(test_nist[c(1,3)], digit %in% c(5, 6))
+data_predict = cbind(as.numeric(as.character(sub_predict$digit)), sub_predict$px)
+names(data_predict)[1] = "digit"
+x_predict <- model.matrix(digit ~ 0 + ., data = data_predict)
+y_predict <- data_predict$digit
+
+pred_ridge = predict(modRidgeCV, type = "response", s = ncvRidge$lambda.1se, newx = x_predict)
+pred_lasso = predict(modLassoCV, type = "response", s = ncvLasso$lambda.1se, newx = x_predict)
+```
+
+```{r B6E-5&6 Va, echo=FALSE}
+H_ridge <- table(pred_ridge > 0.5, y_predict == 6)
+print('The confusion matrix for the Ridge regression is:')
+H_ridge
+
+H_lasso <- table(pred_lasso > 0.5, y_predict == 6)
+print('The confusion matrix for the Lasso regression is:')
+H_lasso
+```
+
+The accuracies of both models are the following:
+
+```{r B6E-5&6 VI, echo=FALSE}
+# Accuracy Ridge
+sprintf('Accuracy of Ridge: %f', sum(diag(H_ridge)) / sum(H_ridge))
+
+# Accuracy Lasso
+sprintf('Accuracy of Lasso: %f', sum(diag(H_lasso)) / sum(H_lasso))
+```
+
+Now we repeat the process but in this case we will compare digits 1 and 7:
+
+```{r B6E-1&7 I}
+# For digits 1 and 7
+sub = subset(train_nist[c(1,3)], digit %in% c(1, 7))
+data = cbind(as.numeric(as.character(sub$digit)), sub$px)
+names(data)[1] = "digit"
+```
+
+Showing the average numbers 1 and 7 from the dataset:
+
+```{r B6E-1&7 II, echo=FALSE}
+
+# average 4 in dataset
+show_digit(colMeans(subset(data, digit == 1))[2:785])
+
+# average 9 in dataset
+show_digit(colMeans(subset(data, digit == 7))[2:785])
+```
+
+Now we make the model for those digits:
+
+```{r B6E-1&7 III}
+x <- model.matrix(digit ~ 0 + ., data = data)
+y <- data$digit
+
+ncvRidge <- cv.glmnet(x = x, y = y, alpha = 0, nfolds = 5, family = "binomial")
+modRidgeCV <- ncvRidge$glmnet.fit
+
+ncvLasso <- cv.glmnet(x = x, y = y, alpha = 1, nfolds = 5, family = "binomial")
+modLassoCV <- ncvLasso$glmnet.fit
+```
+
+Inspecting the best models by plotting their corresponding graphs:
+
+```{r B6E-1&7 IV, echo=FALSE}
+
+# Inspect the best models
+plot(modRidgeCV, label = TRUE, xvar = "lambda")
+abline(v = log(c(ncvRidge$lambda.min, ncvRidge$lambda.1se)))
+
+plot(modRidgeCV, xvar = "norm", label = TRUE)
+plot(modRidgeCV, label = TRUE, xvar = "dev")
+```
+
+Some persistently important predictors for Ridge are 421, 563, 533 and 88.
+
+```{r B6E-1&7 V, echo=FALSE}
+plot(modLassoCV, label = TRUE, xvar = "lambda")
+abline(v = log(c(ncvLasso$lambda.min, ncvLasso$lambda.1se)))
+
+plot(modLassoCV, xvar = "norm", label = TRUE)
+plot(modLassoCV, label = TRUE, xvar = "dev")
+```
+
+Some persistently important predictors for Lasso are 421, 563, 533 and 779. 
+
+Now we will make the predictions using the testing data:
+
+```{r B6E-1&7 VI}
+sub_predict = subset(test_nist[c(1,3)], digit %in% c(1, 7))
+data_predict = cbind(as.numeric(as.character(sub_predict$digit)), sub_predict$px)
+names(data_predict)[1] = "digit"
+x_predict <- model.matrix(digit ~ 0 + ., data = data_predict)
+y_predict <- data_predict$digit
+
+pred_ridge = predict(modRidgeCV, type = "response", s = ncvRidge$lambda.1se, newx = x_predict)
+pred_lasso = predict(modLassoCV, type = "response", s = ncvLasso$lambda.1se, newx = x_predict)
+```
+```{r B6E-1&7 VII, echo=FALSE}
+H_ridge <- table(pred_ridge > 0.5, y_predict == 7)
+print('The confusion matrix for the Ridge regression is:')
+H_ridge
+
+H_lasso <- table(pred_ridge > 0.5, y_predict == 7)
+print('The confusion matrix for the Lasso regression is:')
+H_lasso
+```
+
+And finally the accuracies of these models are:
+
+```{r B6E-1&7 VIII, echo=FALSE}
+# Accuracy Ridge
+sprintf('Accuracy of Ridge: %f', sum(diag(H_ridge)) / sum(H_ridge))
+
+# Accuracy Lasso
+sprintf('Accuracy of Lasso: %f', sum(diag(H_lasso)) / sum(H_lasso))
+```
+
+
+We can see that in general all three logistic models to differentiate between two similar sets of digits work pretty well, with an accuracy higher than 90% in all of the cases. We can see that the shrinkage methods do help to achieve these results, since they do not consider high variations in the pixels in the data, but the focus in only some pixels that are more important for the differences between the two digits.
+
+
+### Exercise C-3
+
+#### Implementing a variant of lasso in simulation study similar to study 4.5 from the notes.
+
+**a. Sample from (3.4) but with (X1, . . . , X5)' ∼ N5(0, Σ), with Σ = (σij ). Take σij = ρ|i−j| for i, j = 1, . . . , 5 and ρ = 0, 0.50, 0.99.**
+
+```{r C3 load, echo= FALSE}
+set.seed(123456)
+library(ggplot2)
+num_var <- 5
+montecarlo_iterations <- 200
+```
+
+We will get three different covariance matrices depending on the rho parameter. These will be $\sigma_1, \sigma_2$ and $\sigma_3$. 
+
+```{r C3 a}
+rho <- c(0, 0.5, 0.99)
+
+sigma_1 <- matrix(ncol=num_var,nrow=num_var)
+for(j in 1:num_var){
+  for(i in 1:num_var){
+    sigma_1[i,j] <- rho[1]^abs(i-j)
+  }
+}
+
+sigma_2 <- matrix(ncol=num_var,nrow=num_var)
+for(j in 1:num_var){
+  for(i in 1:num_var){
+    sigma_2[i,j] <- rho[2]^abs(i-j)
+  }
+}
+
+sigma_3 <- matrix(ncol=num_var,nrow=num_var)
+for(j in 1:num_var){
+  for(i in 1:num_var){
+    sigma_3[i,j] <- rho[3]^abs(i-j)
+  }
+}
+# Generate sample sizes
+n <- c(0,0,0,0,0,0,0,0)
+for(i in 1:8){
+  n[i] <- 2^(i+2)
+}
+```
+
+These are the coefficients for the data to be sampled in a. The true_estimators vector just tells us weather the coefficient is  !=0 (TRUE) or 0 (FALSE). 
+
+This vector will be used to evaluate the true fit of lasso: if the model delivered by lasso with a given $\lambda$ makes 0s in the same coefficients that are 0 in true_estimators then we consider that it selected the true model.
+
+```{r C3 a2}
+# Model data
+estimators <- c(0.5,1,1,0,0,0)
+true_estimators <- c(TRUE, TRUE, FALSE, FALSE, FALSE)
+
+mu <- 0
+eps <- rnorm(n[1])
+```
+
+
+**b. Compute the λˆk-CV.**
+**c. Identify the estimated coefficients for λˆk-CV that are different from zero.**
+
+This function generates the data with the parameters specified before. Then we select the $\lambda$ that minimizes MSE using CV with glmnet function and once it is done we fit the model.
+
+We can now get the non zero coefficients in a vector looking like true_estimators.
+
+The last step is to compare them in order to see if the selected model is the true one.
+
+This function does the above 200 times (later it will be 500) using a Montecarlo simulation to get closer to the real results.
+
+
+The function to be used in the following exercises is defined in the following way:
+
+```{r C3 b-c}
+compute_montecarlo <- function(sample_size, cov_matrix){
+
+    cv_results <- c()
+    one_results <- c()
+    m = 0
+    
+    while(m < montecarlo_iterations){
+      
+        # Generate X variables following N(0, Σ)
+        x1 <- rnorm(sample_size, mu, cov_matrix)
+        x2 <- rnorm(sample_size, mu, cov_matrix)
+        x3 <- rnorm(sample_size, mu, cov_matrix)
+        x4 <- rnorm(sample_size, mu, cov_matrix)
+        x5 <- rnorm(sample_size, mu, cov_matrix)
+        # Compute the response variable Y
+        y <- estimators[1] + estimators[2] * x1 + estimators[3] * x2 + estimators[4] * x3 + estimators[5] * x4 + estimators[6] * x5 + eps
+        
+        x <- matrix(c(x1,x2,x3,x4,x5), ncol=5)
+        
+        # Perform cross validation to select the k minimizing MSE
+        kcvLasso <- cv.glmnet(x = x, y = y, alpha = 1, nfolds = 10)
+        
+        # Fit the Lasso model with the tuned lambda to get coefficients
+        modLassoCV <- kcvLasso$glmnet.fit
+        
+        # Selecting non zero coefficients
+        selPreds <- predict(modLassoCV, type = "coefficients",
+                            s = c(kcvLasso$lambda.min, kcvLasso$lambda.1se))[-1, ] != 0
+        
+        # Coefficients for CV
+        cv_true <- selPreds[, 1]
+        cv_results <- c(cv_results, all(cv_true == true_estimators))
+        
+        # Coefficients for 1-SE
+        one_true <- selPreds[, 2]
+        one_results <- c(one_results, all(one_true == true_estimators))
+        
+        # Next montecarlo test
+        m <- m + 1
+    
+    }
+    ptrue_cv <- mean(cv_results)
+    ptrue_one <- mean(one_results)
+    
+    return(c(ptrue_cv, ptrue_one))
+}
+```
+
+**d. Repeat Steps 1–3 M = 200 times. Estimate by Monte Carlo the probability of selecting the true model.**
+**e. Move n = 2l, l= 3, . . . , 10.**
+   
+Here we just run the Monte Carlo function that we computed above for each covariance matrix and for each number of samples.
+
+We plot the resulting graph with the 200 simulations below. We can see six different curves. Three for the covariance matrices using the one-standard-error algorithm, and three more using the CrossValidation format.
+
+```{r C3 d-e, echo=FALSE}
+results_history <- data.frame(cv_sigma1 = numeric(), one_sigma1 = numeric(),
+                              cv_sigma2 = numeric(), one_sigma2 = numeric(),
+                              cv_sigma3 = numeric(), one_sigma3 = numeric(),
+                              sample_size = numeric())
+# Disable warnings for cv of small samples
+options(warn = -1)
+
+# Perform 600*8 simulations
+for(size in n){
+  
+  res1 <- compute_montecarlo(sample_size = size, cov_matrix = sigma_1)
+  res2 <- compute_montecarlo(sample_size = size, cov_matrix = sigma_2)
+  res3 <- compute_montecarlo(sample_size = size, cov_matrix = sigma_3)
+  
+  results_history <- rbind(results_history, data.frame(cv_sigma1 = res1[1], one_sigma1 = res1[2],
+                                                       cv_sigma2 = res2[1], one_sigma2 = res2[2],
+                                                       cv_sigma3 = res3[1], one_sigma3 = res3[2],
+                                                       sample_size = size))
+  
+}
+
+ggplot(results_history, aes(x=sample_size)) +
+  geom_line(aes(y = cv_sigma1, color = "red"), size=1) +
+  geom_line(aes(y = cv_sigma2, color = "blue"), size=1)+
+  geom_line(aes(y = cv_sigma3, color = "green"), size=1 )+
+  geom_line(aes(y = one_sigma1, color="red"), linetype="twodash", size=1 ) +
+  geom_line(aes(y = one_sigma2, color="blue"), linetype="twodash", size=1 ) +
+  geom_line(aes(y = one_sigma3, color="green"), linetype="twodash", size=1 ) +
+  xlab("Sample Size") +
+  ylab("Probability of selecting the true model")  +
+  scale_color_discrete(name = "Y series", labels = c("CV/1SE(Dashed) Sigma 1", "CV/1SE(Dashed) Sigma 2",
+                                                     "CV/1SE(Dashed) Sigma 3"))  
+
+```
+
+By inspecting the graph, we see that the one-standard-error $\sigma_i$ perform way better and approach a probability = 1 of selecting the true model as the sample size grows. 
+
+While the CV $\sigma_i$ do not increase their probability of selecting the true model as the sample size increases, and they tend to stay with a probability around 0.25.
+  
+**Overlay the three curves together and comment on the result. Once you have a working solution,increase (M, n) to approach the settings in Figure 4.5.**
+
+Now we will simply increase the number of Monte carlo simulations and increse the sample size as well. The results will be plotted below.
+
+```{r C3 last, echo=FALSE}
+n <- c(0,0,0,0,0,0,0,0,0,0)
+for(i in 1:10){
+  n[i] <- 2^(i+2)
+}
+
+montecarlo_iterations <- 500
+
+results_history2 <- data.frame(cv_sigma1 = numeric(), one_sigma1 = numeric(),
+                              cv_sigma2 = numeric(), one_sigma2 = numeric(),
+                              cv_sigma3 = numeric(), one_sigma3 = numeric(),
+                              sample_size = numeric())
+# Perform 1500*10 simulations
+for(size in n){
+  
+  
+  res1 <- compute_montecarlo(sample_size = size, cov_matrix = sigma_1)
+  res2 <- compute_montecarlo(sample_size = size, cov_matrix = sigma_2)
+  res3 <- compute_montecarlo(sample_size = size, cov_matrix = sigma_3)
+  
+  results_history2 <- rbind(results_history2, data.frame(cv_sigma1 = res1[1], one_sigma1 = res1[2],
+                                                       cv_sigma2 = res2[1], one_sigma2 = res2[2],
+                                                       cv_sigma3 = res3[1], one_sigma3 = res3[2],
+                                                       sample_size = size))
+  
+}
+
+
+ggplot(results_history2, aes(x=sample_size)) +
+  geom_line(aes(y = cv_sigma1, color = "red"), size=1) +
+  geom_line(aes(y = cv_sigma2, color = "blue"), size=1) +
+  geom_line(aes(y = cv_sigma3, color = "green"), size=1) +
+  geom_line(aes(y = one_sigma1, color="red"), linetype="twodash", size=1 ) +
+  geom_line(aes(y = one_sigma2, color="blue"), linetype="twodash", size=1 ) +
+  geom_line(aes(y = one_sigma3, color="green"), linetype="twodash", size=1 ) +
+  xlab("Sample Size") +
+  ylab("Probability of selecting the true model")  +
+  scale_color_discrete(name = "Y series", labels = c("CV/1SE(Dashed) Sigma 1", "CV/1SE(Dashed) Sigma 2",
+                                                     "CV/1SE(Dashed) Sigma 3")) 
+
+```
+
+By inspecting the graph, we see a similar scneario that the one inspected above, it is clear to say that the one-standard-error $\sigma_i$ perform better and their probability of selecting the true model grows as the sample size grows.
+
+Same as the previous graph, the $\sigma_i$ computed with the CV way do not increase their probability of selecting the true model as the sample size increases, and they stay with a constant probability no matter how large the sample size.

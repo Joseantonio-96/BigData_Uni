@@ -1,0 +1,569 @@
+---
+title: "**Project Part 1**"
+author:  | 
+  | Joan Cortes - 100438579
+  | Jose Antonio Jijon Vorbeck - 100438045
+  | Didier Dirks - 100443386
+date: "23-12-2020"
+indent: true
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r Import_data, include=FALSE}
+# Imports
+lapply(c("naniar", "ggplot2", "mice", "MASS", "corrplot", "plotrix", "purrr", "tidyr", "ggplot2", "ica"), require, character.only = TRUE)
+
+#Instantiate colors
+color_1 <- "deepskyblue2"
+color_2 <- "seagreen2"
+color_3 <- "orange2"
+color_4 <- "darkorchid4"
+color_5 <- "orchid2"
+color_6 <- "chocolate4"
+
+# Load data
+X <- read.csv("listings_detailed.csv")
+X[X == ""] <- NA
+```
+
+## Team Project Deliverable 1
+
+The dataset that we have selected consists of data given by AirBnB to describe many of their locations in Madrid. In the original file, there are in total _`r ncol(X)`_ variables and _`r nrow(X)`_ observations, from which some of the variables are mostly incomplete or require some data imputation. The data that has been selected is located on the following link to the _Kaggle_ project: [*Madrid AirBnB Data*](https://www.kaggle.com/rusiano/madrid-airbnb-data?select=listings_detailed.csv)
+
+\vspace{\baselineskip}
+
+\noindent
+**This report will contain the following 5 main steps:**
+
+  1. **Data Pre-Processing**
+      + Visualization of missing values
+      + Dropping useless variables (url, has_image etc..)
+      + Selecting useful quantitative variables for analysis
+      + Imputing missing data
+  2. **Data Visualization**
+      + Scatterplot Matrix
+      + Kernel Densities
+      + Parallel Coordinates Plots (PCP)
+      + Division between sub-populations
+  3. **Data Metrics**
+      + Mean Vector
+      + Covariance matrix
+      + Correlation Matrix
+      + Analysis of different sub-populations
+  4. **Principal Component Analysis**
+      - Transforming skewed data
+      - Analysis of different groups
+      - See which grouping criterion has the most difference
+  5. **Independent Component Analysis**
+      - Exploring non-Gaussian variables to identify outliers
+      - Assessing the existence of natural grouping in the data
+  
+
+\newpage
+### 1. Data Pre-Processing
+
+In this step, we will first focus on variables that have a high percentage of missing data ($>30\%$) these variables are of no use, and we cannot perform any analysis with them, therefore we need to drop them from the dataset.
+
+\setlength{\parindent}{1em}
+Then, there exist some other variables that have no meaning or add nothing different to the analysis, like host, listing URL, images city, country, state and other variables. We need to drop these variables as well. We present below a graph with the percentages of missing values per variable from the complete and original dataset downloaded from Kaggle.
+\hfill\break
+```{r Show_First_Missing_Data, echo=F, fig.width=10, fig.height=10}
+gg_miss_var(X, show_pct = TRUE) + labs(title = "Percentage of missing values in the original dataset")
+```
+\hfill\break
+After verification, we can drop the variables that have $>30\%$ empty (NA) values, and therefore cannot be imputed. But we still need to drop many variables that have no use for the analysis.
+```{r drop_first_missing_vars, echo = FALSE}
+dropVariables <- c("xl_picture_url", "thuzmbnail_url", "jurisdiction_names", "square_feet", "monthly_price", "weekly_price", "license", "notes", "access", "host_about", "house_rules", "transit",  "neighborhood_overview", "security_deposit", "space", "medium_url", "interaction")
+X_usefulvar <- X[ , !(names(X) %in% dropVariables)]
+```
+
+```{r drop_useless_vars, echo = FALSE}
+dropUseless <- c("scrape_id","listing_url","last_scraped","name","summary","description","experiences_offered","picture_url", "host_id", "host_url", "host_name", "host_since", "host_location", "host_acceptance_rate", "host_thumbnail_url", "host_picture_url", "host_neighbourhood", "host_listings_count", "host_verifications", "street", "neighbourhood", "city", "state", "market", "smart_location", "country_code", "country", "is_location_exact", "amenities", "minimum_minimum_nights","maximum_minimum_nights", "minimum_maximum_nights", "maximum_maximum_nights", "minimum_nights_avg_ntm", "maximum_nights_avg_ntm", "calendar_updated", "has_availability", "calendar_last_scraped", "number_of_reviews_ltm", "requires_license", "require_guest_profile_picture", "calculated_host_listings_count", "calculated_host_listings_count_entire_homes", "calculated_host_listings_count_private_rooms", "calculated_host_listings_count_shared_rooms")
+X_clean <- X_usefulvar[ , !names(X_usefulvar) %in% dropUseless]
+```
+\newpage After dropping all the useless variables we stay with a more significant set of variables, note that we have not done any analysis yet, only dropping variables that are of no use for further tests. We must then select the set of **quantitative variables plus a few qualitative ones** that we are going to make plots with for visualization and further statistical analysis. Some categorical variables that are of interest are: _neighborhood_, _host\_is\_superhost_, _property\_type_ and _room\_type_. We will later add these back to the dataset, but for now the focus lies on the quantitative variables. That is why for now only the quantitative variables will be selected from the dataset. Below we present a graph with the missing values of the selected variables:
+\hfill\break
+```{r select_quantitative_vars, echo = F, fig.width=10, fig.height=5}
+X_clean_quant = X_clean[, names(X_clean) %in% c("cleaning_fee","review_scores_value", "review_scores_location","review_scores_checkin","review_scores_accuracy","review_scores_ratin","review_scores_cleanliness","review_scores_communication","reviews_per_month","beds","host_total_listings_count","host_response_rate", "bathrooms","bedrooms","price","number_of_reviews","minimum_nights","maximum_nights","guests_included","extra_people","availability_30","availability_60","availability_90","availability_365","accommodates")]
+gg_miss_var(X_clean_quant, show_pct = TRUE) + labs(title = "Percentage of missing values in the cleaned Dataset")
+```
+\hfill\break
+As shown above, some of the variables have still some missing values (but in lower percentages now). These variables are: Cleaning fee, and the variables consisting of reviews for the locations.
+Now is when one of the main steps of data pre-processing comes into play, performing data imputation. Adding values for the missing cells is very important, since we do not want to have NA's in the PCA nor the ICA process. To this end, we make use of the 'mice' package to impute missing values based on a regressive way, and not by only imputing the mean.
+
+We must also deal with erroneous data in the variables _maximum\_nights_ and _minimum\_nights_, since these two variables present some errors that might be due to wrong input of the numbers by the host when creating their listing on the website. After assessing this possibility, we observed and identified extreme values for _maximum\_nights_ and _minimum\_nights_. High values were set to indicate there is neither a maximum nor a minimum. In order to tackle this problem, we set the maximum number of nights equal to 365 (a year) and the maximum number of minimum nights equal to the 95th percentile of the original data, which is equal to 10.
+
+```{r impute_missing_data, echo=F, results= 'hide', warning=FALSE, fig.width=10, fig.height=5}
+# Change string values (prices and percentages) to numeric
+X_clean_quant$host_response_rate <- as.numeric(gsub("%","",X_clean_quant$host_response_rate))
+X_clean_quant$price <- as.numeric(gsub("\\$","",X_clean_quant$price))
+X_clean_quant$cleaning_fee <- as.numeric(gsub("\\$","",X_clean_quant$cleaning_fee))
+X_clean_quant$extra_people <- as.numeric(gsub("\\$","",X_clean_quant$extra_people))
+
+# Dealing with outliers
+X_clean_quant$maximum_nights[X_clean_quant$maximum_nights > 365] <- 365
+X_clean_quant$minimum_nights[X_clean_quant$minimum_nights>10]<- 10
+
+# Impute the missing values
+imputed_data  <-mice(X_clean_quant, m=2, meth='pmm', seed = 68)
+full_data <- complete(imputed_data)
+
+# Set missing values of host_is_superhost to False
+X_clean[is.na(X_clean$host_is_superhost),]$host_is_superhost = "f"
+
+X_clean$Centro <- as.numeric(ifelse(X_clean$neighbourhood_group_cleansed == 'Centro', 1, 0))
+
+# Dealing with extremes
+full_data$maximum_nights[which(full_data$maximum_nights>365)] <- 365
+full_data$minimum_nights[which(full_data$minimum_nights>10)] <- 10
+full_data['Centro'] <- X_clean$Centro
+
+gg_miss_var(full_data, show_pct = TRUE) + labs(title = "Percentage of missing values in the final dataset")
+
+```
+\hfill\break
+Finally we have achieved a clean, complete and useful set of variables that we are going to use for the remaining of the presentation. For a first glance, we present below the summary of this data set, which contains **`r nrow(full_data)` observations** for **`r ncol(full_data)` variables**.
+
+\newpage
+### 2. Data Visualization
+
+In this part of the report, we will present the data in a visual manner, to get a first glance of it and see if by inspection we can get some trends and main aspects that could help differentiate and split between populations. 
+
+We first plot a scatterplot matrix of only some selected variables since the matrix can get very big and hard to interpret. We observe that the data is very skewed in many variables and at first glance we cannot identify any clear trends or correlations between the variables. This indicates that we should take logarithms of many variables to see if we can obtain better visualizations after.
+
+```{r scatterplot_matrix, echo=F}
+# Create new dataframe that includes all qualitative variables and some interesting categorical variables
+Airbnb <- full_data
+Airbnb$neighbourhood <- X_clean$neighbourhood_group_cleansed
+Airbnb$Superhost <- X_clean$host_is_superhost
+Airbnb$room_type <- X_clean$room_type
+Airbnb$cancellation_policy <- X_clean$cancellation_policy
+
+# Generate scatterplot matrix of some selected variables
+pairs(Airbnb[, c("price", "bedrooms", "review_scores_value", "cleaning_fee", "extra_people", "host_response_rate")], cex=0.1)
+```
+\hfill\break
+\hfill\break
+  Below we will plot all the kernel density graphs for the 24 quantitative variables, this series of graphs allow us to identify the distribution of the predictors and we can see which ones will need any logarithmic transformation and which ones will not. In general, most of the interesting variables will need to have the log transformation since they are highly skewed to the right. There are also many discrete variables that have only some set of numbers and would make no sense to take the logarithm of those.
+
+\newpage \noindent Plotting all the quantitative variables' kernel distributions:
+\setlength{\parindent}{0cm}
+```{r kerndensity_all_quants, echo=FALSE, fig.show="hold", out.width="25%"}
+attach(full_data)
+kerndens_plot = function(v, title){
+  n = deparse(substitute(v))
+  plot(density(v,kernel="gaussian"),ylab="Density",main=paste("Kernel density of", title),xlab=n,col=color_1,lwd=5)
+}
+
+for (i in names(full_data)){
+  x = eval(parse(text = i))
+  kerndens_plot(x, i)
+}
+```
+
+\newpage Now we plot some of the graphs that we consider meaningful when splitting the data into different groups. This is an interesting step of the analysis, since it allows us to see if there are any differences between categories and we can come to smarter conclusions.
+
+\vspace{\baselineskip}
+
+The variables that we have chosen to split things into are the following:
+
+  - Number of reviews when host is super host and when not
+  - Price for the different types of AirBnB listings
+  - Price for the listings in Centro and not Centro
+  - Cleaning fee for the listings in Centro and not Centro
+  
+```{r extra_kern_densities, echo=FALSE, fig.show="hold", out.width="50%"}
+#Function Plotting Kernel Densities
+
+kerndens = function(v){
+  n = deparse(substitute(v))
+  plot(density(v,kernel="gaussian"),ylab="Density",main=paste("Kernel density of", n),xlab=n,col=color_1,lwd=5)
+}
+
+kerndens_2var =function(v1,v2,st1,st2){
+  n1 = deparse(substitute(v1))
+  n2 = deparse(substitute(v2))
+  d_Yes <- density(v1[v2==st1],kernel="gaussian")
+  d_No <- density(v1[v2==st2],kernel="gaussian")
+  min_x <- min(c(min(d_Yes$x),min(d_No$x)))
+  max_x <- max(c(max(d_Yes$x),max(d_No$x)))
+  min_y <- min(c(min(d_Yes$y),min(d_No$y)))
+  max_y <- max(c(max(d_Yes$y),max(d_No$y)))
+  
+  plot(c(min_x,max_x),c(min_y,max_y),xlab=n1,ylab="Density",main=paste(paste(paste("Kernel density of", n1), "in terms of"), n2),type="n")
+  lines(d_Yes$x,d_Yes$y,col=color_2,lwd=5)
+  lines(d_No$x,d_No$y,col=color_3,lwd=5)
+  st1 <- ifelse(st1 ==1, 'Centro', st1)
+  st2 <- ifelse(st2 ==0, 'not Centro', st2)
+  legend("topright",c(st1,st2),col=c(color_2,color_3),lty=c(1,1))
+}
+
+###### function that visualizes the data with 4 different room_types categories
+kerndens_4var =function(v1,v2,st1,st2,st3,st4){
+  n1 = deparse(substitute(v1))
+  n2 = deparse(substitute(v2))
+  d_FullHouse <- density(v1[v2==st1],kernel="gaussian")
+  d_PrivateRoom <- density(v1[v2==st2],kernel="gaussian")
+  d_HotelRoom <- density(v1[v2==st3], kernel = "gaussian")
+  d_SharedRoom <- density(v1[v2==st4], kernel = "gaussian")
+  min_x <- min(min(d_FullHouse$x), min(d_PrivateRoom$x), min(d_HotelRoom$x), min(d_SharedRoom$x))
+  max_x <- max(max(d_FullHouse$x), max(d_PrivateRoom$x), max(d_HotelRoom$x), max(d_SharedRoom$x))
+  min_y <- min(min(d_FullHouse$y), min(d_PrivateRoom$y), min(d_HotelRoom$y), min(d_SharedRoom$y))
+  max_y <- max(max(d_FullHouse$y), max(d_PrivateRoom$y), max(d_HotelRoom$y), max(d_SharedRoom$y))
+  
+  plot(c(min_x,max_x),c(min_y,max_y), xlab=n1,ylab="Density",main=paste0("Kernel density of ", n1, " in terms of ", n2), type="n")
+  lines(d_FullHouse$x,d_FullHouse$y,col=color_2,lwd=5)
+  lines(d_PrivateRoom$x,d_PrivateRoom$y,col=color_3,lwd=5)
+  lines(d_HotelRoom$x,d_HotelRoom$y,col=color_4,lwd=5)
+  lines(d_SharedRoom$x,d_SharedRoom$y,col=color_5,lwd=5)
+  legend("topright",c(st1,st2,st3,st4),col=c(color_2,color_3,color_4, color_5),lty=c(1,1), cex=0.5)
+}
+
+kerndens(log(full_data$number_of_reviews))
+full_data$host_total_listings_count[full_data$host_total_listings_count==0] <- 0.1
+kerndens_2var(log(full_data$number_of_reviews/full_data$host_total_listings_count), X_clean$host_is_superhost, "t", "f")
+
+kerndens(log(full_data$price))
+kerndens_4var(log(full_data$price), X_clean$room_type, "Entire home/apt", "Private room", "Hotel room", "Shared room")
+
+kerndens(log(full_data$price))
+kerndens_2var(log(full_data$price), X_clean$Centro, 1, 0)
+
+kerndens(log(full_data$cleaning_fee))
+kerndens_2var(log(full_data$cleaning_fee), X_clean$Centro, 1, 0)
+
+```
+\hfill\break
+
+We can see that there are some variabilities in the data when looked in different categories. It is interesting to see the differences in the number of reviews, the review values and the availability that super host get compared to not_superhosts. This is telling us that superhost get more clients and that they get in general better reviews than normal hosts. We can also clearly note the differences in price between the 4 different room types existing, although this is expected, this can serve us as a clear differentiator between room_types. The last two plots show the differences for price and cleaning fee for listings that are located in the center of Madrid, and for the ones that are not. We clearly see that there is an increase in both quantities when they are in the city center.
+
+\newpage\setlength{\parindent}{1em}
+Another very useful feature to differentiate between clusters is the Parallel Coordinate Plot (PCP). 
+Below we show the PCP for the dataset, differentiated by room type and neighborhood (Centro or not Centro).
+
+\vspace{\baselineskip}
+
+```{r PCP, echo=F, fig.width=6, fig.height=3.9}
+colpal = seq(length(X_clean$room_type))
+colpal[which(X$room_type=="Entire home/apt")] = color_1
+colpal[which(X$room_type=="Hotel room")] = color_2
+colpal[which(X$room_type=="Private room")] = color_3
+colpal[which(X$room_type=="Shared room")] = color_4
+parcoord(full_data,col=colpal,var.label=TRUE,main="PCP for AirBnB in terms of room type")
+
+
+colpal = seq(1,2)
+colpal[which(full_data$Centro == 1 )] = color_1
+colpal[which(full_data$Centro == 0 )] = color_2
+parcoord(full_data, col=colpal, var.label=FALSE, main="PCP for AirBnB in terms of Centro or not" )
+```
+
+We can see that in these graphs it is very hard to see the differences between the groups, specially because we have more than 20.000 observations and 24 variables, so at the end this is very messy and gives us no great insight of what is really going on between the data. Nevertheless, we can still see that there are some variables in which the colors differ a bit, thus meaning that there could be differences between some variables.
+
+
+\newpage
+### 3. Data Metrics
+
+In this part we will present the mean vector, covariance matrix and correlation matrix of the quantitative variables chosen in the step before. Moreover, we will also perform this analysis for the variables differentiated by _room\_type_, this is going to give us more insight of the true differences between the groups in _room\_type_. 
+
+We start by the mean vector, which can help us see the 'starting point' of the data set, and we can compare it to the different room types. 
+
+\hfill\break
+
+```{r data_metrics, echo=F}
+# Function to convert r matrix into a LateX matrix for using in RMarkdown
+m2l <- function(matr) {
+    matr <- round(x = matr, digits = 2)  # sadly this is necessary because given this function, the options(digits = 2) does not work
+    matr2 <- data.frame(c("~",gsub("_", "- ", rownames(matr))))  # add rownames
+    for (r in colnames(matr)) {  # add col contents and colnames
+      matr2 <- cbind(matr2, c(r, matr[,r]))
+    }
+    printmrow <- function(x) {
+        ret <- paste(paste(x, collapse = " & "), "\\cr")
+        sprintf(ret)
+    }
+    out <- apply(matr2, 1, printmrow)
+    out2 <- paste("\\bordermatrix{", paste(out, collapse = ' '),"}")
+    return(out2)
+}
+
+# Compute sample mean vector, covariance matrix and correlation matrix
+full_data_entirehome = full_data[which(X_clean$room_type == "Entire home/apt"),]
+full_data_hotel = full_data[which(X_clean$room_type == "Hotel room"),]
+full_data_private = full_data[which(X_clean$room_type == "Private room"),]
+full_data_shared = full_data[which(X_clean$room_type == "Shared room"),]
+
+options(digits = 2)
+m_quan <- as.data.frame(cbind(colMeans(full_data), colMeans(full_data_entirehome), colMeans(full_data_hotel), colMeans(full_data_private), colMeans(full_data_shared)))
+names(m_quan) = c('Mean', "Mean[Ent. home/apt]", "Mean[Hotel]", "Mean[Private]", "Mean[Shared]")
+S_quan <- cov(full_data)
+# R_quan <- cor(full_data)
+```
+\noindent
+**Sample Mean Vector:**
+
+\small
+$`r m2l(m_quan)`$
+\normalsize
+
+\hfill\break
+\noindent
+At first glance, we can see that, for most of the variables, the mean is distributed in similar manner among the different type of properties examined. However, we found variables that exhibited a high variability, to wit: price, maximum_nights, and availability_365.  With respect to price, we observed that whereas the mean price in hotels is located around 150 euros, in the case of shared rooms is 65 euros. These differences could be anticipated considering the nature of each service. Furthermore, it can be observed how the mean of the variable availability_365 range from 161 days for the case of entire homes/apartments to 220 days in the case of hotels. Lastly, we also distinguished high variability among the means of maximum-nights ranging from 222 nights, in the case private rooms, to 274 nights in the case of entire homes/apartments.
+
+These findings are easily observable in the sample covariance matrix depicted below. By examining the graphical representation of the matrix, we can spot the variances of the mentioned variables in the diagonal. As it can be seen, the variances of these three variables stand out over the others. 
+
+On the other hand, by examining the sample correlation matrix, we can distinguish the existing correlation among some group of variables. As it could be expected, we found that the variables related to availability are highly correlated. This is due to the fact, that all these variables share information. Similarly, we also found that the variables related to reviews are also positively correlated. Moreover, we found as well natural correlations such as the number of bedrooms and the number of bathrooms.
+
+\vspace{\baselineskip}
+\newpage
+\noindent
+**Sample Covariance Matrix: \hfill Sample Correlation Matrix:**
+
+```{r covplot, echo=F, fig.height=3}
+par(mfrow =c(1,2))
+corrplot(S_quan, is.corr=F, tl.col = "black", tl.cex = 0.4, cl.cex = 0.3)
+corrplot(cor(full_data),tl.col = "black", tl.cex = 0.4, cl.cex = 0.5)
+```
+\hfill\break
+**Sample Correlation Matrices per Room Type:**
+\hfill\break
+\small
+**Entire home/apt \hfill Hotel room**
+\normalsize
+
+```{r corrplot_home_hotel, echo=F, fig.height=4}
+par(mfrow =c(1,2))
+corrplot(cor(full_data_entirehome),tl.col = "black", tl.cex = 0.4, cl.cex = 0.5)
+corrplot(cor(full_data_hotel),tl.col = "black", tl.cex = 0.4, cl.cex = 0.5)
+```
+
+<br>
+\newpage
+\small
+**Private room \hfill Shared room**
+\normalsize
+
+```{r corrplot_private, echo=F, warning=FALSE, fig.height=4}
+par(mfrow =c(1,2))
+corrplot(cor(full_data_private),tl.col = "black", tl.cex = 0.4, cl.cex = 0.5)
+corrplot(cor(subset(full_data_shared, select=-c(bedrooms))),tl.col = "black", tl.cex = 0.4, cl.cex = 0.5)
+
+# remove bedrooms for shared rooms because number of bedrooms = 1 --> st. dev = 0 -> error
+```
+
+By examining the sample correlations discriminating by the type of property, we observed that features described earlier are present in all the of the cases as it could be expected. Notwithstanding, it must be highlighted an increment of negatively correlated variables in the case of shared rooms and hotels. 
+
+\newpage
+### 4. Principal Component Analysis
+
+Visualizing the data and obtaining meaningful insights become more difficult and challenging when dealing with high number of variables as in our case. Because of this, we would like to obtain a low-dimensional representation of our data that provides as much information as possible. In order to accomplish this, we carried out a Principal Component Analysis (PCA). By employing this method, we were able to find a low-dimensional representation of the data that explain as much as possible of the variation in the data. 
+
+Before conducting the PCA, we assessed the normality of the variables. Then, transformed the data to push some variables closer to a normal distribution when needed. It can be observed from the graphs depicted that the transformation implemented yielded good results. Many of our variables were highly skewed before the transformation, whereas now, the distribution is more normal. Specially for the case of the variables price and reviews_per_month.
+
+\vspace{\baselineskip}
+
+```{r transform_data_log, echo=F}
+full_data %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~ key, scales = "free") +
+  geom_histogram(bins=30)+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+
+transformed_data <- full_data + 0.001
+transformed_data$availability_30 <- log(transformed_data$availability_30)
+transformed_data$availability_60 <- log(transformed_data$availability_60)
+transformed_data$availability_90 <- log(transformed_data$availability_90)
+transformed_data$availability_365 <- log(transformed_data$availability_365)
+transformed_data$bedrooms <- log(transformed_data$bedrooms)
+transformed_data$beds <- log(transformed_data$beds)
+transformed_data$bathrooms <- log(transformed_data$bathrooms)
+transformed_data$cleaning_fee <- log(transformed_data$cleaning_fee)
+transformed_data$extra_people <- log(transformed_data$extra_people)
+transformed_data$host_response_rate <- log(transformed_data$host_response_rate)
+transformed_data$number_of_reviews <- log(transformed_data$number_of_reviews)
+transformed_data$price             <-  log(transformed_data$price)
+transformed_data$reviews_per_month <- log(transformed_data$reviews_per_month)
+```
+\hfill\break
+We can see below the distributions of the variables after imposing logarithmic transformation to the skewed ones.
+\hfill\break
+```{r transform_data_log-2, echo=F}
+transformed_data %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~ key, scales = "free") +
+  geom_histogram(bins=30)+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+```
+\hfill\break
+After completion of the transformation of the variables we can apply the PCA function _prcomp_ to get the principal components. Below we present to graphs that show the amount of information given by each of the principal components. The graph on the left shows the percentage of the variance of the data explained by each of the principal components. We can see that the first one explains a bit more than 15%, and that the first 5 explain only 55% of the variability of the data. This is a sign that the data that we are working with is very complex and not easy to represent.
+The graph on the right presents the cumulative variability explained, we can clearly see that they approach 100%, as expected, and that the last PCs do not add much explanation of the data anymore.
+
+```{r PCA-0, echo=F, fig.height=7, fig.width=13}
+#We conduct the PCA after scaling the data to have standard deviation equal to one.
+pca_out <- prcomp(transformed_data,scale=TRUE, center = TRUE)
+
+# We can obtain a summary of the proportion of variance explained (PVE)  of the first few principal components using the summary() method.We can observe that the first 5 principal components explain around 55% of the variance in the data.
+#summary(pca_out)
+
+#Using the plot() function, we can also plot the variance explained by the
+#first few principal components.
+
+pve =100*pca_out$sdev^2/sum(pca_out$sdev^2)
+par(mfrow =c(1,2))
+plot(pve , type ="o", ylab="% Variance Explained", xlab="Principal Component", main= 'Variance Explained by PC',col =" blue", cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5, cex=1.5)
+plot(cumsum(pve), type="o", ylab =" Cumulative % Variance Explained", xlab="Principal Component",main='Cumulative Variance Explained', col = "brown3", cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5, cex=1.5)
+
+#Projections of the data onto the first three
+#principal components (in other words, the scores for the first three principal components).
+colpal = seq(length(X_clean$room_type))
+colpal[which(X_clean$room_type=="Entire home/apt")] = color_1
+colpal[which(X_clean$room_type=="Hotel room")] = color_2
+colpal[which(X_clean$room_type=="Private room")] = color_3
+colpal[which(X_clean$room_type=="Shared room")] = color_4
+```
+\hfill\break
+The figures below both are plots of the First vs. Second PC and First vs. Third PCs. We have differentiated them by _room\_type_ to show the differences in the 4 groups. As we will explain in the following pages, the these three principal components help us identify the main variables that cause the biggest changes between the groups, and they are the price, minimum nights, reviews and availability.
+
+We see that the only variable that has a positive contribution to the first PC is minimum nights, that means that all the points that are to the left of the *x=0* line have no minimum nights. And the price variable has a negative contribution for the first PC while it has a positive one for the second PC. This explains the creation of 2 "streams" of points that go parallel, these are listings that have higher prices but are differentiated by the amounts of minimum nights they propose. It might be even more interesting the third graph, where we see the groups of listings with their availabilities more and less than 30 days out of the last 90 days. This variable serves as a clear identifier and we see that these two groups are then subdivided into smaller groups depending on the room type, we see that entire houses or private rooms both can have more or less than 30 out of 90 days available, and they are present in both clusters.
+
+```{r PCA, echo=F, fig.height=15, fig.width=13}
+par(mfrow =c(2,2))
+plot(pca_out$x[,1:2], pch =19, xlab ="Component 1",ylab="Component 2", cex=0.5, col=colpal,cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5, main="PC1 vs PC2 in terms of Room Type")
+legend("topleft", legend=c("Entire home/apt", "Hotel room", "Private room", "Shared room"), col=c(color_1, color_2, color_3, color_4),pch=19, cex=1.5)
+plot(pca_out$x[,c(1,3) ], pch =19, xlab ="Component 1",ylab="Component 3", cex=0.5, col=colpal,cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5, main="PC1 vs PC3 in terms of Room Type")
+legend("bottomright", legend=c("Entire home/apt", "Hotel room", "Private room", "Shared room"), col=c(color_1, color_2, color_3, color_4),pch=19, cex=1.5)
+
+colpal2 = seq(1,2)
+colpal2[which(X_clean$availability_90 > 30)] = color_1
+colpal2[which(X_clean$availability_90 < 30)] = color_2
+plot(pca_out$x[,1:2], pch =19, xlab ="Component 1",ylab="Component 2", cex=0.5, col=colpal2,cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5, main="PC1 vs PC2 in terms of Availability of last 90 days")
+legend("topleft", legend=c("Available > 30 days of 90", "Available < 30 days of 90"), col=c(color_1, color_2),pch=19, cex=1.5)
+
+#biplot
+# par(mfrow =c(1,1))
+# biplot(pca_out, cex = 0.2)
+```
+\hfill\break
+This last division is very informative, since listings with low availability are the ones that are normally more appealing for tourists of clients in general, thus they have a strong correlation with the price, which can be clearly seen in the plots in the following pages.
+
+The two following graphs show the correlation between the principal components, we see that they do not have any correlation between them, which is one of the key concepts of PCA.
+\hfill\break
+```{r PCA-2, echo=F, fig.height=6, fig.width=13}
+#We can observe that indeed the principal components found are uncorrelated
+par(mfrow =c(1,2))
+corrplot(cov(pca_out$x), number.cex = 0.7, addCoef.col = "gray", is.corr = FALSE, type = "upper",tl.col = "black", tl.cex = 0.7, title = "Covariance Matrix of PCs" ,mar=c(0,0,2,0))
+corrplot(cor(pca_out$x), number.cex = 0.7, addCoef.col = "gray", is.corr = T, type = "lower",tl.col = "black", tl.cex = 0.7, title = "Correlation Matrix of PCs" ,mar=c(0,0,2,0))
+```
+\hfill\break
+Now we can see the weights in terms of the initial variables to the principal components PC1-PC3, it is very useful to take into consideration this relations when looking at the PC1 vs PC2 plot shown above. With help of this plot we can also see which variables are correlated with with ones, since by making an arrow go from the origin to the variable name for every variable we can see if there exist negative, positive or no correlation at all.
+\hfill\break
+```{r PCA-3, echo=F, fig.height=15, fig.width=13}
+
+#Weights for the first two PCs
+par(mfrow =c(2,1))
+plot(pca_out$rotation[,1:2],pch=19,col=color_1,main="Weights for the first two PCs",cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5, cex=2)
+abline(h=0,v=0)
+text(pca_out$rotation[,1:2],labels=colnames(full_data),pos=1,col=color_4,cex=0.9)
+
+#Weights for the first and third PCs
+# par(mfrow =c(1,1))
+plot(pca_out$rotation[,c(1,3)],pch=19,col=color_1,main="Weights for the first and third PCs",cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5, cex=2)
+abline(h=0,v=0)
+text(pca_out$rotation[,c(1,3)],labels=colnames(full_data),pos=1,col=color_4,cex=0.9)
+```
+
+The plot of the weights suggests the existence of 2 groups of variables that behave in a similar manner and are well differentiated. This finding is coherent with the data structure as we have a group of variables related to review-scores and another one associated to availability. Furthermore, it seems to be another group formed by the variables _guest_included_, _price_, _bed_ and _accomodates_. 
+
+We must highlight the fact that groups conformed by availability and price seem to be related whereas the reviews and price are orthogonal, which indicates that are not related. This is a very interesting fact indeed, since we would think that the better scores a listing has, the higher its price could be. According to these findings, reviews would not be connected to price, number of rooms and availability. 
+
+\newpage
+### 5. Independent Component Analysis
+
+Finally, we carried out an independent component analysis in order to obtain independent non-Gaussian signals. Given that the ICA method does not require that the variables follow a Gaussian distribution, we have not used the previous transformed variables.
+\hfill\break
+```{r ICA, echo=FALSE, fig.height=4, fig.width=13}
+# Obtain the ICs 
+
+n <- nrow(full_data)
+p <- ncol(full_data)
+full_data_ica <- icafast(full_data,nc=p,alg="par")
+
+# The ICA scores, i.e., the matrix Z, can be found in S 
+
+Z <- full_data_ica$S
+colnames(Z) <- sprintf("IC-%d",seq(1,ncol(full_data)))
+
+# However, we need to re-scale to have S_z=I (icafast considers the sample covariance matrix
+Z <- Z * sqrt((n-1)/n)
+
+# Compute the neg-entropy of the columns in Z and sort them in decreasing order of neg-entropy
+
+neg_entropy <- function(z){1/12 * mean(z^3)^2 + 1/48 * mean(z^4)^2}
+Z_neg_entropy <- apply(Z,2,neg_entropy)
+ic_sort <- sort(Z_neg_entropy,decreasing=TRUE,index.return=TRUE)$ix
+
+# Plot the sorted neg-entropy and define the ICs sorted by neg-entropy
+
+plot(Z_neg_entropy[ic_sort],type="b",col=color_1,pch=19,cex=0.8,ylab="Neg-entropy",main="Neg-entropies",lwd=1, xaxt='n')
+axis(1, at=seq(1, 25, 1), labels=ic_sort)
+
+```
+
+After having derived the Independent components, we observed the presence of high values of Neg-entropy. The IC 21 presented the highest Neg-entropy with almost 19000. Followed by IC 16 and IC 10, with Neg-entropy values 4966 and 264 respectively. 
+
+From the figure depicted, we can observe how the Neg-entropy value drops drastically from IC 21 to IC16 and from IC 16 to IC 10. Then, it flattens as goes from the IC 10 to IC 13 converging towards 0.
+\hfill\break
+```{r ICA1, echo=FALSE, fig.height=6, fig.width=13}
+# Plot the two ICs with largest neg-entropy
+Z_ic_imp <- Z[,ic_sort]
+plot(Z_ic_imp[,1:2],col=as.factor(X_clean$reviews_per_month),pch=19,cex=0.8,xlab="First IC scores",ylab="Second IC scores",main="First two IC scores")
+```
+\hfill\break
+The high Neg-entropy values observed previously indicated the existence of non-Gaussian variables that could present outliers. The figure above confirms the presence of outliers and reveals them. They can be found in the top left and the bottom right of the graph. 
+
+
+```{r ICA2, echo=FALSE, fig.height=6.5, fig.width=13}
+# Plot the correlations between the data matrix and the ICs sorted by neg-entropy
+corrplot(cor(full_data,Z_ic_imp),is.corr=T, tl.col = "black", tl.cex=0.7)
+```
+\hfill\break
+In order to tackle the presence of outliers and assess their management, we examined the corrplot produced with the different independent components and the variables employed. The figure depicted above shows that the IC that yielded the highest Neg-entropy value is negatively related to the variable beds. However, after examining this particular variable, we found that although this variable is clearly non-Gaussian, the data examined is correct and therefore, not further action is needed.
+
+```{r ICA3, echo=FALSE, fig.height=7, fig.width=13}
+plot(Z_ic_imp[,24:25],pch=19,cex=0.2,col=colpal2,xlab="24-th IC scores",ylab="25-th IC scores",main="Last two IC scores")
+legend("topright", legend=c("Available > 30 days of 90", "Available < 30 days of 90"), col=c(color_1, color_2),pch=19, cex=1)
+```
+\hfill\break
+
+Furthermore, we finally examined the Independents Components that yielded the lowest Neg-entropy values in order to look for groups. We can see that when splitting with _availability_90_ > 30 or _availability_90_ < 30 we see a clear distinction between the groups, reinforcing the theory that this variable serves as a clear differentiator between 'popular' and 'unpopular' AirBnB listings.
+
+
+### Conclusions 
+
+Throughout the report the process to visualize, analyze and obtain insights of a real world database has been demonstrated. We have started with a very raw data base from AirBnB listings in Madrid, and the goal of this assignment was to get an insight of the information and to try to obtain some conclusions about the correlations between predictors for each listing. In the Principal Component Analysis and Independent Component Analysis we have shown that the variables _availability_, _price_ and _reviews_ are key differentiators in the dataset. The _availability_ variable gives the amount of days that the listing was free out of the 60, 90 or 365 days, depending on the variable. 
+
+It has been demonstrated that _availability_ is very highly correlated with _price_, and that it can be seen as a measure of popularity. This due to the fact that the lower the availability an apartment or room has, the more successful this apartment or room is, and therefore the owners are able to increase the price per night. 
+
+In the pre-processing stage several steps had to be performed to get rid of variables whose percentages of missing values were too high to impute. Besides this some other variables that were not significant for the analysis have been removed, like images or text. After this the imputation of variables with help of the _mice_ package was key for a standard normalization of the data. 
+
+Step 3 of this report demonstrates that the numerical differences between _room types_ are notable, and therefore there exists a real difference between the groups. The mean vector per groups can be seen as a key indicator to split the data in these 4 clusters: one per room type. Furthermore, we can see that the correlation matrices of all groups are very similar to each other in most cases. This is, however, expectable since the listing's variables are also related between them. 
+
+The results of PCA and ICA in steps 4 and 5 are very useful to see the relationships between the variables and to see if there are any correlations between them. Moreover, PCA can serve as a dimension reduction technique. In this case the reduction of dimensions, however, does not seem feasible as the variance explained per principal component was not very high, only reaching around 55% after 5 principal components. To approach 80% of the total variance explained a high number of 15 principal components is needed.
+
+Finally, we have seen that the listings depend on many variables, and that some of them might be correlated between them, like _price_ and _guest_included_. But the main finding of this report is that _availability_ plays a major role when splitting the data into two main clusters that can be named as "popular listings" and "unpopular listings". This result could not have been obtained without the help of principal and independent component analysis.
+  
