@@ -22,3 +22,5 @@ This repository contains a collection of projects and assignments done in the co
   - This is a purely machine learning example. The assignment was about trying out different ensemble techniques to get the best possible model. Methods such as Random Forests, Gradient Boosting, nearest newighbours, and optimized gradient boosting techniques like Light-Boosting were used and compared. The whole process of pre-processing, training, HP tunning, testing and evaluating the model is described inside.
 * **Wind Energy Predictions using Spark**
   - This is a very similar project as the one above, just that in this case we have used Spark and its functions to develop the most precise model. We have done a PC analysis and compared its solutions using a linear regression.
+* **DeepLearning**
+  - Several PyTorch Projects and tutorials done in class with neural networks. Inside this folder we have RNN, CNN and DNN. Some of these are dedicated to image and text recognition. 
